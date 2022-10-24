@@ -1,0 +1,186 @@
+install.packages("pacman")
+pacman::p_load(pacman,FSelector, entropy, caret,tidyverse, dplyr, e1071,ggplot2,randomForest)
+
+Data <- read.csv(file.choose(), sep = ",", stringsAsFactors = T, header = T) # load dataset
+ 
+#Convert all infinite (INF) values to NA and remove the NA values
+cleanData <- do.call(data.frame, lapply(comb_data, 
+                                        function(x) replace(x, is.infinite(x), NA)))
+Data<- na.omit(cleanData)
+sum(is.na(UNSW))
+UNSW[is.na(UNSW)] <- 0  # replace NA with 0
+
+
+## removing zero variance features
+new <- Data[ , which(apply(Data, 2, var) != 0)]
+
+#scaling of dataframe (normalisation)
+
+norm <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+UNSW1 <- as.data.frame(lapply(UNSW[-22], norm))
+UNSW2 <-rbind(UNSW1,New_Normal)
+#newDF$marker <- factor(newDF$marker)
+
+# Spliting Dataset into training datasets
+partition <- sample(1:600100, 0.90*nrow(NF_BoT2), replace = F)
+
+Train_Common_Features <- NF_BoT_Data[partition,]
+Test_Common_Features <- NF_BoT_Data[-partition,]
+
+
+# Script to run over 30 iterations with difference subsets of the dataset
+
+result <- vector("list", 30L)
+for (n in 1:30) {
+  Train <- Train_Common_Features[sample(1:540090, 0.15*nrow(Train_Common_Features)),]
+  memory.size()
+  Time1 = Sys.time()
+  fit_rand <- randomForest(Label~., data= Train)
+  memory.size()
+  Time2 = Sys.time()
+  Train_time = (Time2 - Time1)
+  print(Train_time)
+  start_memory = memory.size()
+  Time3 = Sys.time()
+  pred_rand <- predict(fit_rand, Test_Common_Features)
+  result[[n]] <- confusionMatrix(pred_rand, Test_Common_Features$Label)
+  print(result)
+  Time4 = Sys.time()
+  Validation_time <- (Time4 - Time3)
+  print(Validation_time)
+  stop_memory <- memory.size()
+  Validation_memory = (stop_memory - start_memory)
+}
+
+
+# Synthetic Data Generation
+
+sNormal <- syn(Normal[-22], m=1, k=31247.97*nrow(Normal[-22]))
+
+# Export synthetic file  
+
+write.syn(Data, file = "UNSW_Split", filetype = "csv")
+write_xlsx(x = UNSW_Split, path = "UNSW_Split", col_names = TRUE)
+
+# select 10% of data size
+
+new_UNSW2 <- UNSW2[sample(1:1999934, 0.08*nrow(UNSW2)),]
+
+# feature ranking
+
+info_Gain <- information.gain(Label~., new_UNSW2)
+Chi_sqrd <- chi.squared(Label~., new_UNSW2)
+imp <-importance(Gini)
+row.names(imp)[order(imp, decreasing = TRUE)] 
+
+
+# packages installation
+
+install.packages("keras")
+library(keras)
+install_keras()
+library(keras)
+library(tensorflow)
+
+# converting dataset to binary class
+
+Label <- ifelse(UNSW2A$Label=="DDoS",0,1)
+new_UNSW2A <- data.frame(UNSW2A,Label)
+new_UNSW2A <- new_UNSW2A[,-22]
+table(new_UNSW2A$Label)
+
+
+# subsetting of new datasets based on feature selection techniques
+
+UNSW_Common_Data<- new_UNSW2A[,c("Feature2","Feature4","Feature5",
+                                 "Feature7","Feature8","Feature10",
+                                 "Feature11","Feature113","Feature14",
+                                 "Feature16","Feature19","Label")]
+
+UNSW_Info_Gain_Data<- new_UNSW2A[,c("Feature2","Feature4","Feature5","Feature6",
+                                 "Feature7","Feature8","Feature9","Feature10",
+                                 "Feature11","Feature12","Feature113","Feature14",
+                                 "Feature16","Feature18","Feature19",
+                                 "Feature21","Label")]
+
+UNSW_Chi_Squared_Data<- new_UNSW2A[,c("Feature2","Feature4","Feature5","Feature6",
+                                      "Feature7","Feature8","Feature9","Feature10",
+                                      "Feature11","Feature12","Feature113","Feature14",
+                                      "Feature16","Feature18","Feature19",
+                                      "Feature21","Label")]
+
+UNSW_Gini_Index_Data<- new_UNSW2A[,c("Feature2","Feature3","Feature4","Feature5",
+                                     "Feature7","Feature8","Feature10",
+                                     "Feature11","Feature113","Feature14","Feature15",
+                                     "Feature16","Feature18","Feature19","Feature20",
+                                     "Feature21","Label")]
+
+# Deep Learning script to run 30 iterations
+
+result <- vector("list", 30L)
+for (n in 1:30) {
+  train <- UNSW_Common_Data[sample(1:1999934, 0.8*nrow(UNSW_Common_Data)),]
+  DF<- as.matrix(train) #convert datafarame to matrix and remove dimensions
+  dimnames(DF) <-NULL
+  set.seed(222)
+  #data partition
+  part <- sample(1:1599947, 0.7*nrow(DF), replace = F)
+  training<- DF[part,1:11]
+  testing <- DF[-part,1:11]
+  trainingtarget <- DF[part,12]
+  testingtarget <- DF[-part,12]
+  trainLabels <- to_categorical(trainingtarget)
+  testLabels <- to_categorical(testingtarget)
+  #build model
+  model <- keras_model_sequential()
+  model%>%layer_dense(units = 8, activation = "relu", input_shape = c(11)) %>%
+    layer_dense(units = 2, activation = "sigmoid")
+  summary(model)
+  
+  # compile the loss function
+  model %>% compile(loss= "binary_crossentropy", 
+                    optimizer="adam",
+                    metrics=c("accuracy")
+  )
+  #fit model
+  fit_model <- model %>% fit(training, trainLabels, epochs=5, batch_size=32, 
+                             validation_split=0.03,)
+  plot(fit_model)
+  # model evaluation
+  start_memory = memory.size()
+  Time1 = Sys.time()
+  model %>% evaluate(testing, testLabels)
+  #pred <- model %>% predict(testing) %>% `>`(0.5)# %>% k_cast("int32")
+  pred <- model %>% predict(testing) %>% as.data.frame() %>%
+    mutate(target = ifelse(V2 > 0.5, 1, 0)) %>% select(target) %>% as.vector()
+  result[[n]] <-confusionMatrix(table(pred$target, as.factor(testingtarget)))
+  print(result)
+  Time2 = Sys.time()
+  Validation_time <- (Time2 - Time1)
+  print(Validation_time)
+  stop_memory <- memory.size()
+  Validation_memory = (stop_memory - start_memory)
+}
+
+# p-value calculation using t-test
+
+x = Common-feature values for time over 30 iterations
+y = Information gain values for time over 30 iterations
+w = Chi-sqaured values for time over 30 iterations
+z = Gini-index values for time over 30 iterations
+
+t.test(x,y) # comparing common-features vs information gain
+t.test(x,w) # comparing common-features vs Chi-squared
+t.test(x,z) # comparing common-features vs Gini index
+
+# Memory p-value computation
+xm = Common-feature values for memory over 30 iterations
+ym = Information gain values for memory over 30 iterations
+wm = Chi-sqaured values for memory over 30 iterations
+zm = Gini-index values for memory over 30 iterations
+
+t.test(xm,ym) # comparing common-features vs information gain
+t.test(xm,wm) # comparing common-features vs Chi-squared
+t.test(xm,zm) # comparing common-features vs Gini index
